@@ -7,6 +7,7 @@ class constants{
     static CLUB = "Robotics";
     static FILESTORAGE = __dirname;
     static PORT = 4001;
+    static version = 1.0;
     static url = "mongodb://192.168.7.51:3001/";
 }
 

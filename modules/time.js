@@ -39,7 +39,7 @@ class time{
         }else if(this.second < 10){
             s = "0" + this.second;
         }
-        return h + ':' + m + ':' + s;
+        return h + '.' + m + '.' + s;
     }
 }
 

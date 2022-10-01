@@ -7,7 +7,6 @@ var fs = require('fs');
 var path = require('path');
 var express = require('express');
 var app = express();
-const cors = require('cors');
 const constants = require("./modules/constants");
 var MongoClient = require("mongodb").MongoClient;
 const schedule = require("node-schedule");
@@ -24,9 +23,6 @@ const csvWriter = createCsvWriter({
 });
 
 app.use(express.static('archive'));
-app.use(cors({
-    origin: 'https://alphaknights.xyz'
-}));
 
 
 const rule = new schedule.RecurrenceRule();
@@ -80,10 +76,7 @@ function end(req, res, success) {
 }
 
 app.get('/entry/', async function (req, res) {
-    // res.setHeader("Access-Control-Allow-Origin", "https://alphaknights.xyz");
-    // res.setHeader("Access-Control-Request-Method", "*");
-    // res.setHeader("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
-    // res.setHeader("Access-Control-Allow-Headers", "*");
+    res.setHeader("Access-Control-Allow-Headers", "*");
     let q = url.parse(req.url, true).query;
     let success = new results(true, 500, "Internal Server Error");
 
@@ -131,10 +124,7 @@ app.get('/entry/', async function (req, res) {
 
 
 app.get('/exit/', async function (req, res) {
-    // res.setHeader("Access-Control-Allow-Origin", "*");
-    // res.setHeader("Access-Control-Request-Method", "*");
-    // res.setHeader("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
-    // res.setHeader("Access-Control-Allow-Headers", "*");
+    res.setHeader("Access-Control-Allow-Headers", "*");
     let q = url.parse(req.url, true).query;
     let success = new results(true, 500, "Internal Server Error");
 
@@ -186,11 +176,14 @@ app.get('/flush/', async function (req, res) {
         try {
 
             await MongoClient.connect(constants.url, async function (err, db) {
+                console.log("t")
                 if (err) {
                     success = new results(false, 31, "Mongodb failed: " + err)
                     throw err;
                 };
+                console.log("t2")
                 try {
+                    console.log("t3")
                     await getSigninSheet(() => {
                         fs.readFile("./out.csv", function (error, content) {
                             if (error) {
@@ -227,6 +220,10 @@ app.get('/flush/', async function (req, res) {
     }
 })
 
+app.get('/', function (req, res) {
+    res.sendFile(__dirname + "/" + "index.html");
+})
+
 app.get('/tree/', function (req, res) {
     res.setHeader("Access-Control-Allow-Headers", "*");
     res.writeHead(200);
@@ -234,16 +231,12 @@ app.get('/tree/', function (req, res) {
     res.end(JSON.stringify(tree), 'utf-8');
 })
 
-app.get('/', function (req, res) {
-    res.sendFile(__dirname + "/" + "index.html");
-})
-
 
 var server = app.listen(constants.PORT, function () {
     var host = server.address().address
     var port = server.address().port
-    console.log("Version: v"+constants.version)
-    console.log("listening at http://%s:%s", "127.0.0.1", port)
+
+    console.log("Example app listening at http://%s:%s", host, port)
 })
 
 
@@ -329,6 +322,7 @@ async function getSigninSheet(callback) {
                 await csvWriter
                     .writeRecords(s)
                     .then(() => {
+                        console.log('The CSV file was written successfully');
                         callback()
                     });
             }
@@ -344,17 +338,21 @@ async function archive() {
     let x = await time.getDate().toString() + "_" + await time.getTime().toString();
     move("./out.csv", "./archive/" + x + "_SigninSheet.csv", () => { })
     try {
+        console.log("err");
         await MongoClient.connect(constants.url, async function (err, db) {
+            // if (err) throw err;
+            console.log(err);
             var dbo = db.db("data");
             var col;
             col = dbo.collection("signin-data");
-            await col.drop().catch((err)=>{
+            await col.drop().catch((err) => {
                 console.log(err)
             });
             col = dbo.collection("signout-data");
-            await col.drop().catch((err)=>{
+            await col.drop().catch((err) => {
                 console.log(err)
             });
+            // db.close();
         });
     } catch (error) {
     }
