@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title></title>
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css">
+    <!-- jQuery library -->
+    <script
+      src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <!-- Popper JS -->
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.6/umd/popper.min.js"></script>
+    <!-- Latest compiled JavaScript -->
+    <script
+      src="https://maxcdn.bootstrapcdn.com/bootstrap/4.2.1/js/bootstrap.min.js"></script>
+  </head>
+
+  <body>
+    <h1>Server Directory</h1>
+    <div id="tree_container">
+    </div>
+    <script>
+    var listContentsOf = function(tree, container = 'tree_container', depth = '0') {
+      $('#' + container).append('<ul id="' + depth + '"> </ul>');
+      for (var i = 0; i < tree.length; i++) {
+        if (tree[i].name.indexOf(".")!=-1) {
+          if(tree[i].name!=="index.html"){
+            $('#' + depth).append(`<li onclick="location.href='https://api.alphaknights.xyz/${tree[i].path.substring(8)}';">` + tree[i].name + '</li>');
+          }
+        } else {
+          console.log("folder");
+          $('#' + depth).append('<li>' + tree[i].name + '</li>');
+          subID = depth + i;
+          $('#' + depth).append('<div id="' + subID + 'holder"> </div>');
+          listContentsOf(tree[i].children, subID + 'holder', subID);
+        }
+      }
+    };
+    let response = fetch("https://api.alphaknights.xyz/tree/");
+    response.then(function(response) {
+      // console.log(response.json())
+      return response.json();
+    }).then(function(json) {
+      console.log(json);
+      listContentsOf([json]);
+      // listContentsOf(json);
+    });
+  </script>
+  </body>
+</html>

@@ -1,10 +1,8 @@
 const results = require("./modules/results");
 const dirTree = require("directory-tree");
 const time = require("./modules/time.js");
-// const http = require("http");
 const url = require("url");
 var fs = require('fs');
-var path = require('path');
 var express = require('express');
 var app = express();
 const cors = require('cors');
@@ -12,8 +10,11 @@ const constants = require("./modules/constants");
 var MongoClient = require("mongodb").MongoClient;
 const schedule = require("node-schedule");
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+//CSV Writer
 const csvWriter = createCsvWriter({
+    //temp path for newly produced files
     path: 'out.csv',
+    //format for the csv file
     header: [
         { id: 'name', title: 'Name' },
         { id: 'grade', title: 'Grade' },
@@ -22,30 +23,38 @@ const csvWriter = createCsvWriter({
         { id: 'check_out', title: 'Time Out' },
     ]
 });
-
+//selecting the static file directory, which allows us to get the csv files.
 app.use(express.static('archive'));
 app.use(cors({
+    //allows communication between the api site and the main site
     origin: 'https://alphaknights.xyz'
 }));
 
-
+//Generates the csv file once a day
 const rule = new schedule.RecurrenceRule();
-rule.hour = 23;
-rule.minute = 59;
+rule.hour = 18;
+rule.minute = 00;
 rule.tz = "America/Los_Angeles";
 
+//Program to run once a day to generate the csv file
 const job = schedule.scheduleJob(rule, async () => {
     console.log("auto")
     try {
+        //connects to the mongodb server to read the data
         await MongoClient.connect(constants.url, async function (err, db) {
             if (err) {
                 throw err
             };
+            //selects the database named data
             var dbo = db.db("data");
+            //selects the collection of the signin data.
             var ent = await dbo.collection("signin-data");
-            if (ent.countDocuments() > 0) {
+            //only creates the csv file if there are people who signed in during the day.
+            if (await ent.countDocuments() > 0) {
                 try {
+                    //gets the sign in and out data and then checks to see if it was successfully produced.
                     await getSigninSheet(() => {
+                        //checks the out put csv file
                         fs.readFile("./out.csv", function (error, content) {
                             if (error) {
                                 throw error
@@ -66,6 +75,7 @@ const job = schedule.scheduleJob(rule, async () => {
     }
 });
 
+//function to end the http request.
 function end(req, res, success) {
     let q = url.parse(req.url, true).query;
     res.writeHead(200, { "Content-Type": "text/json" });
@@ -79,11 +89,8 @@ function end(req, res, success) {
     );
 }
 
+//This http request is called when the user clicks check in, it will check the user's data and then if it is all valid it writes it to the sign in database
 app.get('/entry/', async function (req, res) {
-    // res.setHeader("Access-Control-Allow-Origin", "https://alphaknights.xyz");
-    // res.setHeader("Access-Control-Request-Method", "*");
-    // res.setHeader("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
-    // res.setHeader("Access-Control-Allow-Headers", "*");
     let q = url.parse(req.url, true).query;
     let success = new results(true, 500, "Internal Server Error");
 
@@ -129,12 +136,8 @@ app.get('/entry/', async function (req, res) {
 })
 
 
-
+//This http request is called when the user clicks check out, it will check the user's data and then if it is all valid it writes it to the sign out database
 app.get('/exit/', async function (req, res) {
-    // res.setHeader("Access-Control-Allow-Origin", "*");
-    // res.setHeader("Access-Control-Request-Method", "*");
-    // res.setHeader("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
-    // res.setHeader("Access-Control-Allow-Headers", "*");
     let q = url.parse(req.url, true).query;
     let success = new results(true, 500, "Internal Server Error");
 
@@ -179,6 +182,7 @@ app.get('/exit/', async function (req, res) {
     }
 })
 
+//This http request is called when the api auto scheduler fails to run, this will also produce and then return the csv file.
 app.get('/flush/', async function (req, res) {
     res.setHeader("Access-Control-Allow-Headers", "*");
     let success = new results(true, 500, "Internal Server Error");
@@ -227,6 +231,7 @@ app.get('/flush/', async function (req, res) {
     }
 })
 
+//This http request is called when the tree for the archive directory is needed, this will allow us to see what files we have from which days and where they are located.
 app.get('/tree/', function (req, res) {
     res.setHeader("Access-Control-Allow-Headers", "*");
     res.writeHead(200);
@@ -234,11 +239,12 @@ app.get('/tree/', function (req, res) {
     res.end(JSON.stringify(tree), 'utf-8');
 })
 
+//This is the catch all for the api website which gives us the server directory in an html file.
 app.get('/', function (req, res) {
     res.sendFile(__dirname + "/" + "index.html");
 })
 
-
+//connects app to the http server
 var server = app.listen(constants.PORT, function () {
     var host = server.address().address
     var port = server.address().port
@@ -252,37 +258,37 @@ async function genSheet(callback) {
         await MongoClient.connect(constants.url, async function (err, db) {
             if (err) throw err;
             var dbo = db.db("data");
-            let entry = [];
-            let exit = [];
-            let tempentry = [];
-            let tempexit = [];
+            let entry = [];//sorted and cleaned array of every user that entered
+            let exit = [];//sorted and cleaned array of every user that exited
+            let tempentry = [];//list of every entry of each user that entered, it needs to be sorted due to possible duplicates
+            let tempexit = [];//list of every exit of each user that exited, it needs to be sorted due to possible duplicates
             var ent = await dbo.collection("signin-data");
             var ext = await dbo.collection("signout-data");
             tempentry = await ent.find({}).toArray();
             tempexit = await ext.find({}).toArray();
             for (const item of tempentry) {
-                if (item['name'].toString().indexOf("test") == -1) {
-                    var exists = false;
+                if (item['name'].toString().indexOf("test") == -1) {//ignores any person with name test
+                    var duplicate = false;//is there a duplicate?
                     for (const person of entry) {
                         if (person['id'] == item['id'] && person['date'] == item['date']) {
-                            exists = true;
+                            duplicate = true;//if there is a duplicate then it sets duplicate to true
                         }
                     }
-                    if (!exists) entry.push(item);
+                    if (!duplicate) entry.push(item);//if there is no duplicate then it pushes it to the list
                 }
             }
             for (const item of tempexit) {
-                if (item['name'].toString().indexOf("test") == -1) {
-                    var exists = false;
+                if (item['name'].toString().indexOf("test") == -1) {//ignores any person with name test
+                    var duplicate = false;//is there a duplicate?
                     for (const person of exit) {
                         if (person['id'] == item['id'] && person['date'] == item['date']) {
-                            exists = true;
+                            duplicate = true;//if there is a duplicate then it sets duplicate to true
                         }
                     }
-                    if (!exists) exit.push(item);
+                    if (!duplicate) exit.push(item);//if there is no duplicate then it pushes it to the list
                 }
             }
-            let signinSheet = [];
+            let signinSheet = [];//list of each user and their check in and out times
             for (const person of entry) {
                 var exists = false;
                 var exitData;
@@ -312,8 +318,15 @@ async function genSheet(callback) {
                     })
                 }
             }
+            //adds the singature part to the sheet
+            signinSheet.push({
+                name: 'Signature',
+                grade: '',
+                id: '',
+                check_in: 'Date',
+                check_out: ''
+            })
             callback(signinSheet);
-            // db.close();
         });
 
 
@@ -322,6 +335,7 @@ async function genSheet(callback) {
     }
 }
 
+//creates the sign in csv sheet
 async function getSigninSheet(callback) {
     try {
         var s = await genSheet(async (s) => {
@@ -339,11 +353,12 @@ async function getSigninSheet(callback) {
 
 }
 
-
+//moves the output file to the final place in the archive folder, then backs up and clears the mongodb for the next time.
 async function archive() {
     let x = await time.getDate().toString() + "_" + await time.getTime().toString();
     move("./out.csv", "./archive/" + x + "_SigninSheet.csv", () => { })
     try {
+        await save();
         await MongoClient.connect(constants.url, async function (err, db) {
             var dbo = db.db("data");
             var col;
@@ -360,6 +375,34 @@ async function archive() {
     }
 }
 
+//backs up the mongodb server
+async function save() {
+    let x = await time.getDate().toString() + "_" + await time.getTime().toString();
+    try {
+        await MongoClient.connect(constants.url, async function (err, db) {
+            if (err) throw err;
+            var dbo = db.db("data");
+            let tempentry = [];
+            let tempexit = [];
+            var ent = await dbo.collection("signin-data");
+            var ext = await dbo.collection("signout-data");
+            tempentry = await ent.find({}).toArray();
+            tempexit = await ext.find({}).toArray();
+            fs.writeFile(`\\backup\\${x}_signin.txt`, tempentry.toString(), function (err) {
+                if (err) throw err;
+            });
+            fs.writeFile(`\\backup\\${x}_signout.txt`, tempexit.toString(), function (err) {
+                if (err) throw err;
+            });
+        });
+
+
+    } catch (error) {
+        throw error
+    }
+}
+
+//moves any file to another location
 function move(oldPath, newPath, callback) {
 
     fs.rename(oldPath, newPath, function (err) {
